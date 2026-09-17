@@ -1,0 +1,904 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+<title>Rescue AI Command Center</title>
+
+<style>
+* {
+    box-sizing: border-box;
+}
+
+body {
+    margin: 0;
+    background: #070b12;
+    color: #e8eef7;
+    font-family: Arial, Helvetica, sans-serif;
+}
+
+header {
+    padding: 28px 36px;
+    border-bottom: 1px solid #202938;
+    background: #0d131d;
+}
+
+h1 {
+    margin: 0;
+    font-size: 30px;
+    letter-spacing: 2px;
+}
+
+.live {
+    margin-top: 10px;
+    color: #25e58a;
+    font-size: 14px;
+}
+
+.container {
+    padding: 28px;
+    max-width: 1600px;
+    margin: auto;
+}
+
+.grid {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 22px;
+}
+
+.card {
+    background: #101722;
+    border: 1px solid #202b3b;
+    border-radius: 18px;
+    padding: 24px;
+    min-height: 210px;
+    box-shadow: 0 10px 35px rgba(0,0,0,0.25);
+}
+
+.card h2 {
+    margin-top: 0;
+    font-size: 18px;
+    color: #aebbd0;
+    letter-spacing: 1px;
+}
+
+.value {
+    font-size: 32px;
+    font-weight: bold;
+    margin: 20px 0;
+}
+
+.row {
+    display: flex;
+    justify-content: space-between;
+    padding: 12px 0;
+    border-bottom: 1px solid #202938;
+}
+
+.label {
+    color: #8997ad;
+}
+
+.good {
+    color: #25e58a;
+}
+
+.warning {
+    color: #ffd166;
+}
+
+.danger {
+    color: #ff5c70;
+}
+
+.command {
+    font-size: 34px;
+    font-weight: bold;
+    text-align: center;
+    padding: 25px 10px;
+    background: #182231;
+    border-radius: 14px;
+    margin-top: 20px;
+}
+
+.motor-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 12px;
+    margin-top: 20px;
+}
+
+.motor {
+    background: #182231;
+    border-radius: 12px;
+    padding: 18px;
+    text-align: center;
+}
+
+.motor-name {
+    color: #8fa0b8;
+    font-size: 14px;
+}
+
+.motor-value {
+    font-size: 28px;
+    font-weight: bold;
+    margin-top: 8px;
+}
+
+.angle {
+    text-align: center;
+    font-size: 56px;
+    font-weight: bold;
+    margin: 25px 0;
+}
+
+.status {
+    display: inline-block;
+    padding: 7px 12px;
+    border-radius: 20px;
+    background: #182231;
+    font-size: 13px;
+}
+
+.full {
+    grid-column: span 2;
+}
+
+@media(max-width: 1100px) {
+    .grid {
+        grid-template-columns: repeat(2, 1fr);
+    }
+}
+
+@media(max-width: 700px) {
+    .grid {
+        grid-template-columns: 1fr;
+    }
+
+    .full {
+        grid-column: span 1;
+    }
+}
+</style>
+</head>
+
+<body>
+
+<header>
+    <h1>RESCUE AI COMMAND CENTER</h1>
+    <div class="live">
+        ● LIVE SYSTEM
+        <span id="updated">Connecting...</span>
+    </div>
+</header>
+
+<div class="container">
+
+<div class="grid">
+
+    <!-- AUDIO -->
+    <div class="card">
+        <h2>🎙 AUDIO</h2>
+
+        <div class="row">
+            <span class="label">HELP</span>
+            <strong id="help">--</strong>
+        </div>
+
+        <div class="row">
+            <span class="label">Confidence</span>
+            <strong id="audioConfidence">--</strong>
+        </div>
+    </div>
+
+
+    <!-- CAMERA -->
+    <div class="card">
+        <h2>📷 CAMERA</h2>
+
+        <div class="row">
+            <span class="label">Person</span>
+            <strong id="person">--</strong>
+        </div>
+
+        <div class="row">
+            <span class="label">YOLO Confidence</span>
+            <strong id="cameraConfidence">--</strong>
+        </div>
+    </div>
+    <!-- LIVE RASPBERRY PI CAMERA -->
+    <div class="card">
+        <h2>🎥 LIVE RASPBERRY PI CAMERA</h2>
+
+        <div style="
+            width:100%;
+            background:#000;
+            border-radius:14px;
+            overflow:hidden;
+            margin-top:15px;
+        ">
+
+            <img
+                id="liveCamera"
+                src="/camera"
+                alt="Raspberry Pi Camera"
+                style="
+                    width:100%;
+                    display:block;
+                    aspect-ratio:4/3;
+                    object-fit:cover;
+                "
+            >
+
+        </div>
+
+        <div class="row">
+            <span class="label">Camera</span>
+            <strong class="good">LIVE</strong>
+        </div>
+    </div>
+
+    <!-- ULTRASONIC -->
+    <div class="card">
+        <h2>📡 ULTRASONIC</h2>
+
+        <div class="value" id="distance">-- cm</div>
+
+        <div class="row">
+            <span class="label">Path</span>
+            <strong id="path">--</strong>
+        </div>
+    </div>
+
+
+    <!-- AI FUSION -->
+    <div class="card">
+        <h2>🧠 AI FUSION</h2>
+
+        <div class="row">
+            <span class="label">Person Confidence</span>
+            <strong id="fusedConfidence">--</strong>
+        </div>
+
+        <div class="row">
+            <span class="label">Direction</span>
+            <strong id="direction">--</strong>
+        </div>
+
+        <div class="row">
+            <span class="label">Person Status</span>
+            <strong id="personStatus">--</strong>
+        </div>
+    </div>
+
+
+    <!-- COMMAND -->
+    <div class="card">
+        <h2>🚁 DRONE COMMAND</h2>
+
+        <div class="command" id="command">
+            WAITING
+        </div>
+    </div>
+
+
+    <!-- MOTORS -->
+    <div class="card">
+        <h2>⚙ LIVE MOTOR CONTROL</h2>
+
+        <div class="motor-grid">
+
+            <div class="motor">
+                <div class="motor-name">M1 — FRONT LEFT</div>
+                <div class="motor-value" id="m1">--%</div>
+            </div>
+
+            <div class="motor">
+                <div class="motor-name">M3 — FRONT RIGHT</div>
+                <div class="motor-value" id="m3">--%</div>
+            </div>
+
+            <div class="motor">
+                <div class="motor-name">M4 — REAR LEFT</div>
+                <div class="motor-value" id="m4">--%</div>
+            </div>
+
+            <div class="motor">
+                <div class="motor-name">M2 — REAR RIGHT</div>
+                <div class="motor-value" id="m2">--%</div>
+            </div>
+
+        </div>
+    </div>
+
+
+    <!-- ROLL -->
+    <div class="card">
+        <h2>↔ ROLL COMMAND</h2>
+
+        <div class="angle" id="angle">
+            0°
+        </div>
+
+        <div class="row">
+            <span class="label">Motor Command</span>
+            <strong id="motorCommand">WAITING</strong>
+        </div>
+    </div>
+
+
+    <!-- NAVIGATION -->
+    <div class="card">
+        <h2>🧭 NAVIGATION</h2>
+
+        <div class="row">
+            <span class="label">State</span>
+            <strong id="navState">--</strong>
+        </div>
+
+        <div class="row">
+            <span class="label">Action</span>
+            <strong id="navAction">--</strong>
+        </div>
+
+        <div class="row">
+            <span class="label">Lane</span>
+            <strong id="navLane">--</strong>
+        </div>
+
+        <div class="row">
+            <span class="label">Phase</span>
+            <strong id="navPhase">--</strong>
+        </div>
+
+        <div class="row">
+            <span class="label">Direction</span>
+            <strong id="navDirection">--</strong>
+        </div>
+    </div>
+
+
+    <!-- DRONE POSITION -->
+    <div class="card">
+        <h2>📍 DRONE POSITION</h2>
+
+        <div class="value" id="dronePosition">
+            X: -- m<br>
+            Y: -- m
+        </div>
+
+        <div class="row">
+            <span class="label">Search Area</span>
+            <strong>100 × 100 m</strong>
+        </div>
+
+        <div class="row">
+            <span class="label">Search Progress</span>
+            <strong id="searchProgress">--%</strong>
+        </div>
+    </div>
+
+
+    <!-- OBSTACLE -->
+    <div class="card">
+        <h2>🚧 OBSTACLE AVOIDANCE</h2>
+
+        <div class="row">
+            <span class="label">Status</span>
+            <strong id="obstacleStatus">--</strong>
+        </div>
+
+        <div class="row">
+            <span class="label">Distance</span>
+            <strong id="obstacleDistance">-- cm</strong>
+        </div>
+
+        <div class="row">
+            <span class="label">Action</span>
+            <strong id="avoidAction">--</strong>
+        </div>
+
+        <div class="row">
+            <span class="label">Resume</span>
+            <strong id="resumeAction">--</strong>
+        </div>
+    </div>
+
+
+    <!-- RETURN HOME -->
+    <div class="card">
+        <h2>🏠 RETURN TO HOME</h2>
+
+        <div class="command"
+             id="returnHomeStatus"
+             style="font-size:22px;">
+            READY
+        </div>
+
+        <button
+            id="returnHomeButton"
+            onclick="returnHome()"
+            style="
+                width:100%;
+                margin-top:20px;
+                padding:18px;
+                border:none;
+                border-radius:12px;
+                background:#ff5c70;
+                color:white;
+                font-size:18px;
+                font-weight:bold;
+                cursor:pointer;
+            ">
+            RETURN TO HOME
+        </button>
+         <button
+    id="cancelReturnHomeButton"
+    onclick="cancelReturnHome()"
+    style="
+        width:100%;
+        margin-top:12px;
+        padding:16px;
+        border:none;
+        border-radius:12px;
+        background:#25e58a;
+        color:#07110b;
+        font-size:16px;
+        font-weight:bold;
+        cursor:pointer;
+    "
+>
+    CANCEL RETURN HOME
+</button> 
+   </div>
+
+   <!-- SYSTEM -->
+    <div class="card full">
+        <h2>📊 SYSTEM STATUS</h2>
+
+        <div class="row">
+            <span class="label">Telemetry</span>
+            <span class="status good" id="telemetryStatus">
+                CONNECTING
+            </span>
+        </div>
+
+        <div class="row">
+            <span class="label">Last Update</span>
+            <strong id="lastUpdate">--</strong>
+        </div>
+    </div>
+
+</div>
+
+</div>
+
+
+<script>
+
+
+
+/*
+ * UPDATE EVERY 500 ms
+ */
+
+async function updateDashboard() {
+
+    try {
+
+        const response = await fetch("/api/telemetry");
+
+        const data = await response.json();
+
+        const ai = data.ai || {};
+        const motors = data.motors || {};
+        const navigation = data.navigation || {};
+        const returnHome = data.return_home || {};
+
+        const ultrasonic = ai.ultrasonic || {};
+        const fusion = ai.fusion || {};
+        const audio = ai.audio || {};
+        const camera = ai.camera || {};
+
+
+        /*
+         * AUDIO
+         */
+        console.log("AUDIO DATA:",audio);
+        document.getElementById("help").textContent =
+            audio.help ? "YES" :"NO";
+
+        document.getElementById("audioConfidence").textContent =
+            ((audio.confidence || 0) * 100).toFixed(1) + "%";
+
+
+        /*
+         * CAMERA
+         */
+        console.log("CAMERA DATA:",camera);
+        document.getElementById("person").textContent =
+            camera.person ? "YES" : "NO";
+
+        document.getElementById("cameraConfidence").textContent =
+            ((camera.confidence || 0) * 100).toFixed(1) + "%";
+
+
+        /*
+         * ULTRASONIC
+         */
+
+        if (ultrasonic.distance_cm !== null &&
+            ultrasonic.distance_cm !== undefined) {
+
+            document.getElementById("distance").textContent =
+                Number(ultrasonic.distance_cm).toFixed(1) + " cm";
+
+        } else {
+
+            document.getElementById("distance").textContent =
+                "-- cm";
+        }
+
+        document.getElementById("path").textContent =
+            ultrasonic.path || "UNKNOWN";
+
+
+        /*
+         * AI FUSION
+         */
+
+        document.getElementById("fusedConfidence").textContent =
+            ((fusion.person_confidence || 0) * 100).toFixed(1) + "%";
+
+        document.getElementById("direction").textContent =
+            fusion.direction || "UNKNOWN";
+
+        document.getElementById("personStatus").textContent =
+            fusion.person_status || "UNKNOWN";
+
+
+        /*
+         * COMMAND
+         */
+
+        document.getElementById("command").textContent =
+            fusion.command || navigation.action || "STOP";
+
+
+        /*
+         * MOTORS
+         */
+
+        const motorData = motors.motors || {};
+
+        document.getElementById("m1").textContent =
+            (motorData.M1 ?? "--") + "%";
+
+        document.getElementById("m2").textContent =
+            (motorData.M2 ?? "--") + "%";
+
+        document.getElementById("m3").textContent =
+            (motorData.M3 ?? "--") + "%";
+
+        document.getElementById("m4").textContent =
+            (motorData.M4 ?? "--") + "%";
+
+
+        /*
+         * MOTOR COMMAND / ANGLE
+         */
+
+        document.getElementById("angle").textContent =
+            (motors.angle ?? 0) + "°";
+
+        document.getElementById("motorCommand").textContent =
+            motors.command || "WAITING";
+
+
+        /*
+         * NAVIGATION
+         */
+
+        if (document.getElementById("navState")) {
+
+            document.getElementById("navState").textContent =
+                navigation.state || "--";
+
+            document.getElementById("navAction").textContent =
+                navigation.action || "--";
+
+            document.getElementById("navLane").textContent =
+                navigation.lane !== undefined
+                    ? navigation.lane
+                    : "--";
+
+            document.getElementById("navDirection").textContent =
+                navigation.direction || "--";
+        }
+
+
+        /*
+         * DRONE POSITION
+         */
+
+        if (document.getElementById("dronePosition")) {
+
+            const x = Number(navigation.x || 0);
+            const y = Number(navigation.y || 0);
+
+            document.getElementById("dronePosition").innerHTML =
+                "X: " + x.toFixed(1) + " m<br>" +
+                "Y: " + y.toFixed(1) + " m";
+
+
+            /*
+             * SEARCH PROGRESS
+             */
+
+            const totalDistance =
+                100 * 21;
+
+            const currentDistance =
+                (navigation.lane || 1) * 100;
+
+            let progress =
+                (currentDistance / totalDistance) * 100;
+
+            progress = Math.max(0, Math.min(100, progress));
+
+            document.getElementById("searchProgress").textContent =
+                progress.toFixed(1) + "%";
+        }
+
+
+        /*
+         * NAVIGATION PHASE
+         */
+
+        if (document.getElementById("navPhase")) {
+
+            let phase = navigation.phase || "";
+
+            if (!phase) {
+
+                const action = navigation.action || "";
+
+                if (action === "FORWARD")
+                    phase = "FORWARD";
+
+                else if (action === "BACKWARD")
+                    phase = "BACKWARD";
+
+                else if (action === "SHIFT_RIGHT")
+                    phase = "SHIFT RIGHT";
+
+                else if (action === "AVOID_LEFT")
+                    phase = "AVOID LEFT";
+
+                else if (action === "AVOID_RIGHT")
+                    phase = "AVOID RIGHT";
+
+                else if (action === "AVOID_FORWARD")
+                    phase = "AVOID FORWARD";
+
+                else if (action === "AVOID_BACKWARD")
+                    phase = "AVOID BACKWARD";
+
+                else
+                    phase = "--";
+            }
+
+            document.getElementById("navPhase").textContent =
+                phase;
+        }
+
+
+        /*
+         * OBSTACLE AVOIDANCE
+         */
+
+        if (document.getElementById("obstacleStatus")) {
+
+            const distance =
+                Number(ultrasonic.distance_cm ?? 999);
+
+            const navAction =
+                navigation.action || "--";
+
+            document.getElementById("obstacleDistance").textContent =
+                distance.toFixed(1) + " cm";
+
+
+            if (navAction.startsWith("AVOID")) {
+
+                document.getElementById("obstacleStatus").textContent =
+                    "AVOIDING";
+
+                document.getElementById("avoidAction").textContent =
+                    navAction;
+
+            } else if (distance < 60) {
+
+                document.getElementById("obstacleStatus").textContent =
+                    "CAUTION";
+
+                document.getElementById("avoidAction").textContent =
+                    "MONITORING";
+
+            } else {
+
+                document.getElementById("obstacleStatus").textContent =
+                    "CLEAR";
+
+                document.getElementById("avoidAction").textContent =
+                    "NONE";
+            }
+
+
+            document.getElementById("resumeAction").textContent =
+                navigation.resume_action || "--";
+        }
+
+
+        /*
+         * RETURN TO HOME STATUS
+         */
+
+        if (document.getElementById("returnHomeStatus")) {
+
+            if (returnHome.return_home === true) {
+
+                document.getElementById("returnHomeStatus").textContent =
+                    "RETURNING HOME";
+
+            } else {
+
+                document.getElementById("returnHomeStatus").textContent =
+                    "READY";
+            }
+        }
+
+
+        /*
+         * SYSTEM STATUS
+         */
+
+        document.getElementById("telemetryStatus").textContent =
+            "CONNECTED";
+
+        document.getElementById("telemetryStatus").className =
+            "status good";
+
+        const now = new Date();
+
+        document.getElementById("updated").textContent =
+            "Updated " + now.toLocaleTimeString();
+
+        document.getElementById("lastUpdate").textContent =
+            now.toLocaleTimeString();
+
+    }
+
+    catch (error) {
+
+        console.error(error);
+
+        document.getElementById("telemetryStatus").textContent =
+            "DISCONNECTED";
+
+        document.getElementById("telemetryStatus").className =
+            "status danger";
+    }
+}
+
+
+/*
+ * RETURN TO HOME BUTTON
+ */
+
+async function returnHome() {
+
+    if (!confirm("Send RETURN TO HOME command?")) {
+        return;
+    }
+
+    try {
+
+        const response =
+            await fetch("/api/return-home", {
+                method: "POST"
+            });
+
+        const result =
+            await response.json();
+
+        if (result.success) {
+
+            document.getElementById("returnHomeStatus").textContent =
+                "RETURNING HOME";
+
+        } else {
+
+            alert("Failed to send Return To Home command.");
+        }
+
+    }
+
+    catch (error) {
+
+        console.error(error);
+
+        alert("Connection error while sending Return To Home.");
+    }
+}
+
+async function cancelReturnHome() {
+
+    if (!confirm("Cancel RETURN TO HOME and resume navigation?")) {
+        return;
+    }
+
+    try {
+
+        const response =
+            await fetch("/api/cancel-return-home", {
+                method: "POST"
+            });
+
+        const result =
+            await response.json();
+
+        if (result.success) {
+
+            document.getElementById("returnHomeStatus").textContent =
+                "RETURN HOME CANCELLED";
+
+            document.getElementById("returnHomeStatus").style.color =
+                "#25e58a";
+
+            console.log(">>> RETURN TO HOME CANCELLED");
+
+        } else {
+
+            alert("Failed to cancel Return To Home.");
+        }
+
+    }
+
+    catch (error) {
+
+        console.error(error);
+
+        alert("Connection error while cancelling Return To Home.");
+    }
+}
+
+/*
+ * UPDATE EVERY 500 ms
+ */
+
+updateDashboard();
+
+setInterval(
+    updateDashboard,
+    500
+);
+setInterval(function() {
+
+    const camera =
+        document.getElementById("liveCamera");
+
+    if (camera) {
+
+        camera.src =
+            "/camera?t=" + Date.now();
+    }
+
+}, 200);
+</script>
+
+</body>
+</html>

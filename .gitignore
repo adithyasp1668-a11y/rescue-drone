@@ -1,0 +1,74 @@
+# ==============================
+# Python
+# ==============================
+
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+
+# Virtual environments
+.venv/
+venv/
+env/
+ENV/
+
+# ==============================
+# Runtime / Generated Files
+# ==============================
+
+telemetry.json
+motor_telemetry.json
+navigation_command.json
+return_home.json
+latest_ai_command.txt
+current_distance.txt
+sitl_position.json
+
+# Camera output
+latest_camera.jpg
+
+# ==============================
+# Python Backups / Temporary Files
+# ==============================
+
+*_backup.py
+*_before_*.py
+*_damaged.py
+
+# ==============================
+# AI / Model Files
+# ==============================
+
+*.onnx
+*.pt
+*.pth
+*.tflite
+
+# Speech recognition models
+speech_model/
+
+# ==============================
+# Test Output
+# ==============================
+
+telemetry-before-*.json
+*.log
+
+# ==============================
+# OS / Editor Files
+# ==============================
+
+.DS_Store
+Thumbs.db
+
+.vscode/
+.idea/
+
+# ==============================
+# Temporary Files
+# ==============================
+
+*.tmp
+*.swp
+*.bak

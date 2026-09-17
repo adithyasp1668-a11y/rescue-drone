@@ -1,0 +1,8 @@
+numpy
+opencv-python
+onnxruntime
+vosk
+yolo11n
+Flask
+pymavlink
+picamera2
