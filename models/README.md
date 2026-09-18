@@ -18,9 +18,9 @@ This project uses two AI models for autonomous rescue detection.
 
 YOLO11n ONNX
 
- 2.vosk
+ ##2. VOSK
 
-**Vosk**  is used for offline speech recognition from the two INMP441 microphones.
+**VOSK**  is used for offline speech recognition from the two INMP441 microphones.
 
 ###Purpose
 
