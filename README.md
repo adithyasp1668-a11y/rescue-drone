@@ -17,13 +17,11 @@ The system combines:
 - UAV Flight Control
 - Real-Time Monitoring
 
----
 
 # 🎯 Problem Statement
 
 > **A deployable AI-powered autonomous drone that aids search-and-rescue operations by detecting people and hazards, thereby improving responder safety and reducing victim discovery time.**
 
----
 
 # 💡 Proposed Solution
 
@@ -50,7 +48,7 @@ The central idea is to combine **what the camera sees** with **what the micropho
 
 The complete system follows:
 
-```text
+
 SENSE
   ↓
 DETECT
@@ -71,7 +69,7 @@ MONITOR
   ↓
 RESCUE
 
----
+
 
 # ⭐ Why Our Prototype Stands Out
 
