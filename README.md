@@ -92,12 +92,12 @@ Instead of depending only on a camera, the system combines:
 📡 Environmental Sensing
          ↓
        CAMERA
+         ↓
+      YOLO11n
+         ↓
+  Person Detection
    ↓
-YOLO11n
-   ↓
-Person Detection
-   ↓
-Visual Confidence
+ Visual Confidence
         │
         │
         ├─────────────────┐
