@@ -15,10 +15,10 @@ This project uses two AI models for autonomous rescue detection.
 
 ### Model Format
 
-```text
+
 YOLO11n ONNX
 
-## 2.vosk
+ 2.vosk
 
 **Vosk**  is used for offline speech recognition from the two INMP441 microphones.
 
