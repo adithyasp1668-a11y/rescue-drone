@@ -31,6 +31,7 @@ The drone uses a:
 
 - **Raspberry Pi 4** as the Edge-AI and system-computing platform
 - **ESP32** for sensor acquisition
+- RPLIDAR A1M8** for Obstacle detection 
 - **Raspberry Pi Camera** for visual perception
 - **YOLO11n** for person detection
 - **Two INMP441 microphones** for directional audio sensing
@@ -87,7 +88,7 @@ Instead of depending only on a camera, the system combines:
    +
 🧭 Direction
    +
-📡 Environmental Sensing
+📡 Environmental Sensing(obstacle detection)
 
 2️⃣ AI Does Not Directly Control the Motors
 
@@ -267,6 +268,8 @@ Camera
       +
 2 × INMP441
       +
+A1M8 RPLIDAR
+      +
 Ultrasonic Sensor
       +
 YOLO11n
@@ -284,4 +287,85 @@ This allows the individual perception, navigation, safety and monitoring compone
 🎯 The Core Innovation
 
 A multimodal Edge-AI rescue drone that combines visual person detection, emergency audio detection, directional sensing, autonomous area search, mission-aware obstacle avoidance and Pixhawk-based flight control in a single integrated architecture.
+
+## 🛰️ LiDAR Integration and GPS-Aware SLAM Navigation
+
+The rescue drone integrates the **RPLIDAR A1M8** with its onboard navigation system to improve environmental awareness and support navigation in GPS-denied environments.
+
+### 1. RPLIDAR A1M8 Integration
+
+The RPLIDAR A1M8 provides 2D laser-scan measurements of the surrounding environment. These measurements support obstacle detection and provide scan data for SLAM-based mapping.
+
+Key functions:
+- Capture surrounding distance measurements using LiDAR.
+- Detect obstacles using LiDAR scan data.
+- Publish or process scan measurements for navigation, according to the configured software pipeline.
+- Support environmental mapping in GPS-denied areas.
+
+### 2. Automatic GPS and SLAM Navigation Selection
+
+The system is designed to select its navigation mode based on GPS availability.
+
+| Operating condition | Navigation mode |
+|---|---|
+| Valid GPS fix available | GPS-based navigation |
+| GPS unavailable or GPS-denied environment | SLAM-based navigation |
+
+**GPS-based mode:** The drone uses available GPS information for navigation and follows its configured search strategy.
+
+**SLAM-based mode:** When GPS is unavailable, the SLAM navigation pipeline uses LiDAR scan data to estimate the surrounding environment and support navigation without relying on GPS coordinates.
+
+The mode-selection logic coordinates the navigation system so that the appropriate navigation controller is active for the selected mode.
+
+> GPS availability should be determined using a valid GPS fix, not simply whether a GPS device is connected. Switching between navigation modes must account for localization readiness and safe controller handover.
+
+### 3. LiDAR Obstacle Detection and Navigation
+
+The LiDAR obstacle-monitoring component analyses scan measurements to identify obstacles around the drone.
+
+Conceptual processing flow:
+
+1. Acquire LiDAR scan data.
+2. Analyse obstacle distances and directions.
+3. Determine whether the navigation path is clear or obstructed.
+4. Provide obstacle information to the navigation logic.
+5. Support avoidance decisions and mission continuation when the path becomes clear.
+
+### 4. GPS-Denied Search and Rescue
+
+GPS signals may be unavailable or unreliable inside caves, tunnels, enclosed structures, and certain disaster environments.
+
+In these situations, LiDAR-based SLAM can help the drone build a map of its surroundings while estimating its position relative to that map. With the configured ROS 2 and `slam_toolbox` pipeline, scan data can support mapping and navigation without depending on GPS positioning.
+
+SLAM does not automatically guarantee safe flight. Reliable operation also depends on scan quality, localization, controller coordination, flight stabilization, and testing in the intended environment.
+
+### 5. Updated Navigation Architecture
+
+```text
+                 GPS STATUS
+                     |
+           +---------+---------+
+           |                   |
+      Valid GPS Fix       GPS Unavailable
+           |                   |
+     GPS Navigation       SLAM Navigation
+                               |
+                       RPLIDAR A1M8
+                               |
+                         Laser Scans
+                               |
+                       SLAM / Mapping
+                               |
+                    Obstacle-Aware Decisions
+           |                   |
+           +---------+---------+
+                     |
+              Navigation Logic
+                     |
+                   Pixhawk
+                     |
+             Flight Controller
+                     |
+                   Motors
+```
 
