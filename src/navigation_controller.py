@@ -1,3 +1,4 @@
+import math
 import time
 import json
 import os
@@ -24,6 +25,7 @@ NAVIGATION_COMMAND_FILE = (
 RETURN_HOME_FILE = (
     "/home/pii/rescue_drone/ai/return_home.json"
 )
+SLAM_MODE_FILE = "/home/pi/slam_ws/slam_mode.txt"
 # ============================================================
 # SEARCH AREA
 # ============================================================
@@ -53,7 +55,14 @@ REQUIRED_DETECTIONS = 3
 OBSTACLE_DISTANCE = 30.0
 CAUTION_DISTANCE = 60.0
 
+LIDAR_STOP_DISTANCE = 50.0
 
+LIDAR_CLEAR_DISTANCE = 70.0
+LIDAR_MAX_AGE = 1.5
+LIDAR_FILE = "/home/pii/rescue_drone/ai/lidar_telemetry.json"
+
+MIN_SIDE_CLEARANCE = 70.0
+SIDE_MARGIN = 20.0
 # ============================================================
 # STATES
 # ============================================================
@@ -87,11 +96,24 @@ TRACK_TARGET_RIGHT = "TRACK_RIGHT"
 AVOID_LEFT = "AVOID_LEFT"
 AVOID_RIGHT = "AVOID_RIGHT"
 
+AVOID_FORWARD = "AVOID_FORWARD"
 PAUSE_SEARCH = "PAUSE_SEARCH"
 
 RETURN_TO_LAUNCH = "RETURN_TO_LAUNCH"
 
+def slam_is_active():
 
+    try:
+
+        with open(SLAM_MODE_FILE, "r") as file:
+
+            mode = file.read().strip().upper()
+
+        return mode == "ON"
+
+    except Exception:
+
+        return False
 class ZigZagNavigator:
 
     def __init__(self):
@@ -232,7 +254,8 @@ class ZigZagNavigator:
     # ========================================================
 
     def write_navigation_command(self):
-
+        if slam_is_active():
+            return
         data = {
 
             "timestamp": time.time(),
@@ -417,38 +440,205 @@ class ZigZagNavigator:
 
     def obstacle_check(self, data):
 
+        # ====================================================
+        # ULTRASONIC
+        # ====================================================
+
         ultrasonic = data.get(
             "ultrasonic",
             {}
         )
 
-        distance = float(
-            ultrasonic.get(
-                "distance_cm",
-                999.0
-            )
-        )
 
-        path = ultrasonic.get(
+        ultrasonic_raw = ultrasonic.get("distance_cm")
+
+        try:
+            ultrasonic_distance = float(ultrasonic_raw)
+            if not math.isfinite(ultrasonic_distance) or ultrasonic_distance <= 0:
+                ultrasonic_distance = None
+        except (TypeError, ValueError):
+            ultrasonic_distance = None
+        ultrasonic_path = ultrasonic.get(
             "path",
             "UNKNOWN"
         )
 
+
+        # ====================================================
+        # LIDAR
+        # ====================================================
+
+        lidar_front = 99999.0
+        lidar_left = 99999.0
+        lidar_right = 99999.0
+        lidar_status = "UNKNOWN"
+        lidar_fresh = False
+
+        try:
+
+            with open(
+                LIDAR_FILE,
+                "r"
+            ) as f:
+
+                lidar_data = json.load(f)
+
+
+            lidar_timestamp = float(
+                lidar_data.get(
+                    "timestamp",
+                    0.0
+                )
+            )
+
+
+            age = (
+                time.time()
+                - lidar_timestamp
+            )
+
+
+            if age <= LIDAR_MAX_AGE:
+
+                lidar_fresh = True
+
+                lidar_front = float(
+                    lidar_data.get(
+                        "front_cm",
+                        9999.0
+                    )
+                )
+
+                lidar_left = float(
+                    lidar_data.get(
+                        "left_cm",
+                        9999.0
+                    )
+                )
+
+                lidar_right = float(
+                    lidar_data.get(
+                        "right_cm",
+                        9999.0
+                    )
+                )
+
+                lidar_status = lidar_data.get(
+                    "status",
+                    "UNKNOWN"
+                )
+
+            else:
+
+                print(
+                    f">>> LIDAR DATA STALE: "
+                    f"{age:.2f} sec"
+                )
+
+        except Exception as e:
+
+            print(
+                ">>> LIDAR READ ERROR:",
+                e
+            )
+
+
+        # ====================================================
+        # DISPLAY
+        # ====================================================
+
         print(
             f"[SAFETY] "
-            f"Distance: {distance:.1f} cm | "
-            f"Path: {path}"
+            f"Ultrasonic: "
+            f"{ultrasonic_distance:.1f} cm | "
+            f"LiDAR Front: "
+            f"{lidar_front:.1f} cm | "
+            f"Left: "
+            f"{lidar_left:.1f} cm | "
+            f"Right: "
+            f"{lidar_right:.1f} cm | "
+            f"LiDAR: "
+            f"{lidar_status}"
         )
 
 
         # ====================================================
-        # OBSTACLE DETECTED
+        # SIDE THRESHOLDS
+        #
+        # 40 cm = side considered blocked
+        # 25 cm = emergency minimum
         # ====================================================
 
-        if distance < OBSTACLE_DISTANCE:
+        SIDE_BLOCK_DISTANCE = 30.0
+
+        SIDE_EMERGENCY_DISTANCE = 25.0
+
+
+        # ====================================================
+        # FRONT OBSTACLE
+        #
+        # IMPORTANT:
+        # LEFT/RIGHT DO NOT START AVOIDANCE.
+        # ONLY FRONT/ULTRASONIC STARTS AVOIDANCE.
+        # ====================================================
+
+       
+        ultrasonic_obstacle = (
+    ultrasonic_distance is not None
+    and ultrasonic_distance < OBSTACLE_DISTANCE
+
+        )
+
+
+        lidar_front_obstacle = (
+            lidar_fresh
+            and
+            lidar_front
+            <= LIDAR_STOP_DISTANCE
+        )
+
+
+        front_obstacle = (
+            ultrasonic_obstacle
+            or
+            lidar_front_obstacle
+        )
+
+
+        # ====================================================
+        # SIDE STATUS
+        #
+        # These are used ONLY to select direction.
+        # ====================================================
+
+        left_blocked = False
+        right_blocked = False
+
+
+        if lidar_fresh:
+
+            left_blocked = (
+                lidar_left
+                < SIDE_BLOCK_DISTANCE
+            )
+
+            right_blocked = (
+                lidar_right
+                < SIDE_BLOCK_DISTANCE
+            )
+
+
+        # ====================================================
+        # FIRST DETECTION
+        # ====================================================
+
+        obstacle_detected = (
+            front_obstacle or left_blocked or right_blocked
+        )
+        if obstacle_detected:
 
             # ------------------------------------------------
-            # FIRST ENTRY INTO AVOIDANCE
+            # SAVE NAVIGATION STATE ONLY ON FIRST ENTRY
             # ------------------------------------------------
 
             if self.state != AVOID:
@@ -457,174 +647,251 @@ class ZigZagNavigator:
                     "!!! OBSTACLE DETECTED !!!"
                 )
 
+
+                if ultrasonic_obstacle:
+
+                    print(
+                        ">>> ULTRASONIC OBSTACLE"
+                    )
+
+
+                if lidar_front_obstacle:
+
+                    print(
+                        ">>> LIDAR FRONT OBSTACLE"
+                    )
+
+
                 print(
-                    ">>> ENTERING OBSTACLE AVOIDANCE"
+                    ">>> SAVING NAVIGATION STATE"
                 )
 
 
-                # --------------------------------------------
-                # SAVE CURRENT NAVIGATION
-                # --------------------------------------------
+                self.resume_state = (
+                    self.state
+                )
 
-                self.resume_state = self.state
+                self.resume_action = (
+                    self.action
+                )
 
-                self.resume_action = self.action
-
-                self.resume_x = self.x
-
-                self.resume_y = self.y
-
-                self.resume_lane = self.lane
+                self.resume_lane = (
+                    self.lane
+                )
 
                 self.resume_direction = (
                     self.direction
                 )
 
-
-                print(
-                    ">>> ORIGINAL MOVEMENT SAVED"
-                )
-
-                print(
-                    f">>> Resume Action: "
-                    f"{self.resume_action}"
-                )
-
-
-                # --------------------------------------------
-                # SELECT PERPENDICULAR AVOIDANCE
-                # --------------------------------------------
-
-                if self.resume_action == FORWARD:
-
-                    # Forward obstacle:
-                    # move sideways
-                    self.avoid_direction = "LEFT"
-
-                    self.action = AVOID_LEFT
-
-
-                elif self.resume_action == BACKWARD:
-
-                    # Backward obstacle:
-                    # move sideways
-                    self.avoid_direction = "RIGHT"
-
-                    self.action = AVOID_RIGHT
-
-
-                elif self.resume_action == SHIFT_RIGHT:
-
-                    # Sideways movement:
-                    # move longitudinally
-                    self.avoid_direction = "FORWARD"
-
-                    self.action = AVOID_FORWARD
-
-
-                elif self.resume_action == TRACK_LEFT:
-
-                    # Left tracking:
-                    # move longitudinally
-                    self.avoid_direction = "FORWARD"
-
-                    self.action = AVOID_FORWARD
-
-
-                elif self.resume_action == TRACK_RIGHT:
-
-                    # Right tracking:
-                    # move longitudinally
-                    self.avoid_direction = "FORWARD"
-
-                    self.action = AVOID_FORWARD
-
-
-                elif self.resume_action == MOVE_LEFT:
-
-                    self.avoid_direction = "FORWARD"
-
-                    self.action = AVOID_FORWARD
-
-
-                elif self.resume_action == MOVE_RIGHT:
-
-                    self.avoid_direction = "FORWARD"
-
-                    self.action = AVOID_FORWARD
-
-
-                else:
-
-                    # Safe fallback for an unknown
-                    # original movement
-                    self.avoid_direction = "LEFT"
-
-                    self.action = AVOID_LEFT
-
-
-                print(
-                    f">>> AVOID ACTION: "
-                    f"{self.action}"
-                )
-
-                print(
-                    f">>> AVOID DIRECTION: "
-                    f"{self.avoid_direction}"
-                )
-
-
                 self.avoid_steps = 0
 
 
-            # ------------------------------------------------
-            # CONTINUE AVOIDANCE
-            # ------------------------------------------------
+                # =================================================
+                # SELECT AVOIDANCE DIRECTION
+                # =================================================
+
+            if lidar_fresh:
+                # LEFT BLOCKED -> MOVE RIGHT
+                if left_blocked and not right_blocked:
+                    self.avoid_direction = "RIGHT"
+                    print(">>> LEFT OBSTACLE: AVOIDING RIGHT")
+
+                # RIGHT BLOCKED -> MOVE LEFT
+                elif right_blocked and not left_blocked:
+                    self.avoid_direction = "LEFT"
+                    print(">>> RIGHT OBSTACLE: AVOIDING LEFT")
+
+                # BOTH SIDES BLOCKED -> CHOOSE THE SAFER SIDE
+                elif left_blocked and right_blocked:
+                    if lidar_left > lidar_right:
+                        self.avoid_direction = "LEFT"
+                    elif lidar_right > lidar_left:
+                        self.avoid_direction = "RIGHT"
+                    else:
+                        self.avoid_direction = "NONE"
+
+                    if self.avoid_direction == "NONE":
+                        print(">>> BOTH SIDES UNSAFE: HOLD")
+                    else:
+                        print(
+                            f">>> BOTH SIDES BLOCKED: "
+                            f"CHOOSING {self.avoid_direction}"
+                        )
+
+                # FRONT OBSTACLE, SIDES CLEAR -> CHOOSE MORE OPEN SIDE
+                else:
+                    if lidar_left > lidar_right:
+                        self.avoid_direction = "LEFT"
+                    elif lidar_right > lidar_left:
+                        self.avoid_direction = "RIGHT"
+                    else:
+                        self.avoid_direction = "NONE"
+
+                    print(
+                        f">>> FRONT OBSTACLE: "
+                        f"CHOOSING {self.avoid_direction}"
+                    )
+
+            else:
+                self.avoid_direction = "NONE"
+                print(">>> LIDAR DATA STALE: HOLD")
+
+
+
+            # =================================================
+            # ENTER AVOIDANCE
+            # =================================================
 
             self.state = AVOID
 
             self.avoid_steps += 1
 
 
-            # ------------------------------------------------
-            # KEEP THE SELECTED AVOIDANCE ACTION
-            # ------------------------------------------------
+            # =================================================
+            # DYNAMIC DIRECTION CHECK
+            #
+            # If selected side becomes blocked,
+            # switch to the other side automatically.
+            # =================================================
 
-            if self.resume_action == FORWARD:
+            if lidar_fresh:
 
-                self.action = AVOID_LEFT
+                # ---------------------------------------------
+                # CURRENTLY GOING LEFT
+                # LEFT BECAME BLOCKED
+                # SWITCH RIGHT IF POSSIBLE
+                # ---------------------------------------------
+
+                if (
+                    self.avoid_direction
+                    == "LEFT"
+                    and
+                    left_blocked
+                    and
+                    not right_blocked
+                ):
+
+                    self.avoid_direction = (
+                        "RIGHT"
+                    )
+
+                    print(
+                        ">>> LEFT BECAME BLOCKED"
+                    )
+
+                    print(
+                        ">>> SWITCHING TO RIGHT"
+                    )
 
 
-            elif self.resume_action == BACKWARD:
+                # ---------------------------------------------
+                # CURRENTLY GOING RIGHT
+                # RIGHT BECAME BLOCKED
+                # SWITCH LEFT IF POSSIBLE
+                # ---------------------------------------------
 
-                self.action = AVOID_RIGHT
+                elif (
+                    self.avoid_direction
+                    == "RIGHT"
+                    and
+                    right_blocked
+                    and
+                    not left_blocked
+                ):
+
+                    self.avoid_direction = (
+                        "LEFT"
+                    )
+
+                    print(
+                        ">>> RIGHT BECAME BLOCKED"
+                    )
+
+                    print(
+                        ">>> SWITCHING TO LEFT"
+                    )
+
+
+                # ---------------------------------------------
+                # BOTH SIDES VERY CLOSE
+                # ---------------------------------------------
+
+                elif (
+                    left_blocked
+                    and
+                    right_blocked
+                ):
+
+                    if (
+                        lidar_left
+                        >
+                        lidar_right
+                        and
+                        lidar_left
+                        >=
+                        SIDE_EMERGENCY_DISTANCE
+                    ):
+
+                        self.avoid_direction = (
+                            "LEFT"
+                        )
+
+                    elif (
+                        lidar_right
+                        >=
+                        SIDE_EMERGENCY_DISTANCE
+                    ):
+
+                        self.avoid_direction = (
+                            "RIGHT"
+                        )
+
+                    else:
+
+                        self.avoid_direction = (
+                            "NONE"
+                        )
+
+
+            # =================================================
+            # SELECT CURRENT ACTION
+            # =================================================
+
+            if (
+                self.avoid_direction
+                == "LEFT"
+            ):
+
+                self.action = (
+                    "AVOID_LEFT"
+                )
 
 
             elif (
-                self.resume_action == SHIFT_RIGHT
-                or self.resume_action == TRACK_LEFT
-                or self.resume_action == TRACK_RIGHT
-                or self.resume_action == MOVE_LEFT
-                or self.resume_action == MOVE_RIGHT
+                self.avoid_direction
+                == "RIGHT"
             ):
 
-                self.action = AVOID_FORWARD
+                self.action = (
+                    "AVOID_RIGHT"
+                )
 
 
             else:
 
-                if self.avoid_direction == "RIGHT":
-
-                    self.action = AVOID_RIGHT
-
-                else:
-
-                    self.action = AVOID_LEFT
+                self.action = (
+                    "STOP"
+                )
 
 
             print(
-                f">>> OBSTACLE AVOIDANCE "
+                f">>> AVOIDANCE STEP: "
                 f"{self.avoid_steps}"
+            )
+
+            print(
+                f">>> AVOID DIRECTION: "
+                f"{self.avoid_direction}"
             )
 
             print(
@@ -639,80 +906,229 @@ class ZigZagNavigator:
 
 
         # ====================================================
-        # OBSTACLE CLEAR
+        # ALREADY IN AVOIDANCE
+        #
+        # FRONT MUST BECOME CLEAR
+        # AND THE SELECTED ESCAPE SIDE MUST BE CLEAR
         # ====================================================
 
         if self.state == AVOID:
 
-            print(
-                ">>> OBSTACLE CLEARED"
+            lidar_front_clear = (
+                (
+                    not lidar_fresh
+                )
+                or
+                (
+                    lidar_front
+                    >
+                    LIDAR_STOP_DISTANCE
+                )
             )
 
-            print(
-                ">>> RESTORING PREVIOUS NAVIGATION"
-            )
 
-
-            # ------------------------------------------------
-            # RESTORE SEARCH POSITION
-            # ------------------------------------------------
-
-            self.x = self.resume_x
-
-            self.y = self.resume_y
-
-            self.lane = self.resume_lane
-
-            self.direction = (
-                self.resume_direction
+            ultrasonic_clear = (
+                ultrasonic_distance
+                >=
+                OBSTACLE_DISTANCE
             )
 
 
             # ------------------------------------------------
-            # RESTORE ORIGINAL STATE
+            # CHECK ESCAPE SIDE
             # ------------------------------------------------
 
-            self.state = self.resume_state
+            if (
+                self.avoid_direction
+                == "LEFT"
+            ):
 
-            self.action = self.resume_action
+                escape_side_clear = (
+                    (
+                        not lidar_fresh
+                    )
+                    or
+                    (
+                        lidar_left
+                        >=
+                        SIDE_BLOCK_DISTANCE
+                    )
+                )
 
 
-            self.avoid_steps = 0
+            elif (
+                self.avoid_direction
+                == "RIGHT"
+            ):
 
+                escape_side_clear = (
+                    (
+                        not lidar_fresh
+                    )
+                    or
+                    (
+                        lidar_right
+                        >=
+                        SIDE_BLOCK_DISTANCE
+                    )
+                )
+
+
+            else:
+
+                escape_side_clear = False
+
+
+            # =================================================
+            # OBSTACLE COMPLETELY CLEAR
+            # =================================================
+
+            if (
+                lidar_front_clear
+                and
+                ultrasonic_clear
+                and
+                escape_side_clear
+            ):
+
+                print(
+                    ">>> OBSTACLE CLEARED"
+                )
+
+                print(
+                    ">>> RETURNING TO NAVIGATION"
+                )
+
+
+                self.state = (
+                    self.resume_state
+                )
+
+                self.action = (
+                    self.resume_action
+                )
+
+                self.lane = (
+                    self.resume_lane
+                )
+
+                self.direction = (
+                    self.resume_direction
+                )
+
+                self.avoid_steps = 0
+
+                self.avoid_direction = (
+                    None
+                )
+
+
+                print(
+                    f">>> RESUMED STATE: "
+                    f"{self.state}"
+                )
+
+                print(
+                    f">>> RESUMED ACTION: "
+                    f"{self.action}"
+                )
+
+
+                self.write_navigation_command()
+
+                return False
+
+
+            # =================================================
+            # STILL AVOIDING
+            # =================================================
 
             print(
-                ">>> ORIGINAL NAVIGATION RESTORED"
+                ">>> OBSTACLE STILL PRESENT"
             )
 
+
+            # ------------------------------------------------
+            # IF CURRENT SIDE IS BLOCKED, SWITCH
+            # ------------------------------------------------
+
+            if lidar_fresh:
+
+                if (
+                    self.avoid_direction
+                    == "LEFT"
+                    and
+                    left_blocked
+                    and
+                    not right_blocked
+                ):
+
+                    self.avoid_direction = (
+                        "RIGHT"
+                    )
+
+
+                elif (
+                    self.avoid_direction
+                    == "RIGHT"
+                    and
+                    right_blocked
+                    and
+                    not left_blocked
+                ):
+
+                    self.avoid_direction = (
+                        "LEFT"
+                    )
+
+
+            # ------------------------------------------------
+            # SEND AVOIDANCE COMMAND
+            # ------------------------------------------------
+
+            if (
+                self.avoid_direction
+                == "LEFT"
+            ):
+
+                self.action = (
+                    "AVOID_LEFT"
+                )
+
+
+            elif (
+                self.avoid_direction
+                == "RIGHT"
+            ):
+
+                self.action = (
+                    "AVOID_RIGHT"
+                )
+
+
+            else:
+
+                self.action = (
+                    "STOP"
+                )
+
+
             print(
-                f">>> Resume Action: "
+                f">>> KEEP AVOIDING: "
                 f"{self.action}"
-            )
-
-            print(
-                f">>> Lane: "
-                f"{self.lane}/"
-                f"{self.total_lanes}"
-            )
-
-            print(
-                f">>> Position: "
-                f"X={self.x:.1f} m | "
-                f"Y={self.y:.1f} m"
             )
 
 
             self.write_navigation_command()
 
-            return False
+            return True
 
 
         # ====================================================
-        # NO OBSTACLE
+        # NORMAL NAVIGATION
         # ====================================================
 
         return False
-
     # ========================================================
     # AI HISTORY
     # ========================================================
@@ -1244,16 +1660,14 @@ class ZigZagNavigator:
                 ">>> NORMAL NAVIGATION PAUSED"
             )
 
-            return
-
-
+        else:
         # ----------------------------------------------------
         # AI
         # ----------------------------------------------------
 
-        self.process_ai(
-            data
-        )
+            self.process_ai(
+                data
+            )
 
 
         # ----------------------------------------------------
@@ -1359,7 +1773,10 @@ if __name__ == "__main__":
     try:
 
         while True:
-
+            
+            if slam_is_active():
+                time.sleep(0.2)
+                continue
             navigator.navigation_step()
 
 
